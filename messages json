@@ -1,0 +1,10 @@
+        ESD1_ERROR_31:
+        {
+            ErrorRule: "31",
+            ErrorId: "R31",
+            Wording: "L'élément n'a pas un contraste suffisant ({0}).Couleurs: Texte ({1}), Arrière-plan ({2})",
+            Level: "err",
+            RDomain: "",
+            DocLink: "",
+            Categories: ["Accessibilité"]
+        },
