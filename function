@@ -1,0 +1,32 @@
+function Esd1Rule31() {
+    // Exécution du test ? (Intranet ET Internet, niveau warning)
+    if (Esd1IgnoreRule(ESD1_MESSAGES.Rules.ESD1_ERROR_31)) {
+        return;
+    }
+
+    // Sélectionner les éléments à analyser (ex: p, a, button, span, th, td, label, input)
+    const elementsToAnalyze = ['p', 'a', 'button', 'span', 'th', 'td', 'label', 'input'];
+
+    // Vérification de elementsToAnalyze avant de l'utiliser
+    if (Array.isArray(elementsToAnalyze) && elementsToAnalyze.length > 0) {
+        // Utilisation sécurisée de join()
+        $(elementsToAnalyze.join(',')).each(function () {
+            const color = $(this).css('color');
+            const backgroundColor = $(this).css('background-color');
+
+            // Vérifier que les couleurs sont valides
+            if (!color || !backgroundColor || color === 'transparent' || backgroundColor === 'transparent') {
+                return; // Ignorer cet élément si l'une des couleurs est invalide
+            }
+
+            const contrastRatio = getContrastRatio(color, backgroundColor);
+
+            if (contrastRatio < 4.5) { // Seuil WCAG 2.0 pour le texte normal
+                // Ajouter une erreur si le contraste est insuffisant
+                Esd1AddError($(this), ESD1_MESSAGES.Rules.ESD1_ERROR_31 , contrastRatio, color, backgroundColor);
+            }
+        });
+    } else {
+        console.error("elementsToAnalyze n'est pas un tableau valide ou est vide.");
+    }
+}
