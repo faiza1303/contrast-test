@@ -1,0 +1,104 @@
+function analyzeContrast() {
+ // Sélectionner directement tous les éléments pertinents dans le document
+    const elementsToAnalyze = ['p', 'a', 'button', 'span', 'th', 'td', 'label', 'input'];
+    
+    // Récupérer tous les éléments à analyser dans le document
+    elementsToAnalyze.forEach(tag => {
+        const elements = document.querySelectorAll(tag); // Sélectionner tous les éléments du type spécifié
+
+        elements.forEach(element => {
+            // Récupérer les couleurs du texte et de l'arrière-plan
+            const color = getComputedStyle(element).color;
+            const backgroundColor = getComputedStyle(element).backgroundColor;
+
+            // Calculer le ratio de contraste
+            const contrastRatio = calculateContrast(color, backgroundColor);
+
+            // Afficher les résultats de l'analyse
+            displayAnalysisResult(element, contrastRatio);
+        });
+    });
+}
+
+// Fonction pour calculer le contraste entre deux couleurs
+function calculateContrast(color1, color2) {
+    const colorObj1 = new Color(color1);
+    const colorObj2 = new Color(color2);
+
+    const luminance1 = colorObj1.luminance;
+    const luminance2 = colorObj2.luminance;
+
+    const ratio = (Math.max(luminance1, luminance2) + 0.05) / (Math.min(luminance1, luminance2) + 0.05);
+    return ratio;
+}
+
+
+// Fonction pour afficher le résultat d'une analyse
+function displayAnalysisResult(element, contrastRatio) {
+    const resultElement = document.createElement('div');
+    resultElement.className = 'contrast-result';
+    element.appendChild(resultElement);
+
+    resultElement.textContent = `Ratio de contraste: ${contrastRatio.toFixed(2)}`;
+    if (contrastRatio < 4.5) { // Seuil pour le contraste
+        resultElement.className = 'contrast-result fail';
+        resultElement.textContent += ' - Contraste insuffisant !';
+    } else {
+        resultElement.className = 'contrast-result pass';
+        resultElement.textContent += ' - Contraste suffisant.';
+    }
+}
+
+
+
+// Fonction pour calculer le ratio de contraste
+function getContrastRatio(color1, color2) {
+    // Convertir les couleurs RGB en luminance
+    const luminance1 = rgbToLuminance(color1);
+    const luminance2 = rgbToLuminance(color2);
+
+    // Calculer le ratio de contraste (formule du WCAG 2.0)
+    const luminanceLight = Math.max(luminance1, luminance2);
+    const luminanceDark = Math.min(luminance1, luminance2);
+
+    return (luminanceLight + 0.05) / (luminanceDark + 0.05);
+}
+
+// Fonction pour convertir une couleur RGB en luminance
+function rgbToLuminance(rgb) {
+    // Si la couleur est en hex, la convertir en RGB
+    if (rgb.startsWith('#')) {
+        rgb = hexToRgb(rgb);
+    }
+
+    // Convertir la couleur RGB en un format numérique (luminance)
+    const rgbArray = rgb.match(/\d+/g).map(Number);
+    const [r, g, b] = rgbArray;
+
+    // Normaliser les valeurs RGB (0-255) à un format [0, 1] et calculer la luminance
+    const a = [r, g, b].map(function (x) {
+        x = x / 255;
+        return (x <= 0.03928) ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
+    });
+
+    // Calculer la luminance relative (en tenant compte des trois couleurs RGB)
+    return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+}
+
+// Fonction pour convertir une couleur hexadécimale en RGB
+function hexToRgb(hex) {
+    let r = 0, g = 0, b = 0;
+
+    // 3 chiffres ou 6 chiffres
+    if (hex.length === 4) {
+        r = parseInt(hex[1] + hex[1], 16);
+        g = parseInt(hex[2] + hex[2], 16);
+        b = parseInt(hex[3] + hex[3], 16);
+    } else if (hex.length === 7) {
+        r = parseInt(hex[1] + hex[2], 16);
+        g = parseInt(hex[3] + hex[4], 16);
+        b = parseInt(hex[5] + hex[6], 16);
+    }
+
+    return `rgb(${r}, ${g}, ${b})`;
+}
