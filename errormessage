@@ -1,0 +1,263 @@
+function Esd1AddError(jTargetObject, oRule, sText0, sText1, sText2, sText3, sText4, sText5, sText6, sText7, sText8, sText9) {
+    // Recherche de l'ID de l'objet posant problème, ou de son plus proche parent
+    var sTargetId = ""; // ID de l'objet en erreur ou de son plus proche parent
+    var jElem = jTargetObject;
+    // var sWording = Esd1FormatText(oRule.ErrorId + ' : ' + oRule.Wording, sText0, sText1, sText2, sText3, sText4, sText5, sText6, sText7, sText8, sText9);
+    var sText = Esd1FormatText(oRule.Wording, sText0, sText1, sText2, sText3, sText4, sText5, sText6, sText7, sText8, sText9);
+    var sWording = oRule.ErrorId + ' : ' + sText;
+    var sCategories = oRule.Categories.join(',');
+    var sDomain = oRule.RDomain;
+
+    //Trace(jTargetObject, "Création d'une erreur","..........................................................." + oRule.Wording);
+    if ((gbEsd1AddOn || gbEsd1Maq) && !gbEsd1Force) {
+        // CES 14/04/2021 Maq ne remonte pas les erreurs hors bloc appli, et l'extension ne remonte pas les erreurs hors contenu (en mode contenu) : 
+        if (gbEsd1Maq && !($(jTargetObject).parents("div.a_blocappli").is("div"))) {
+            //en mode ADD-ON, on ne génère les erreurs que pour le contenu du bloc appli, cela évite la pollution d'erreur avec le gabarit
+            Trace(jTargetObject, sWording, " --- on ne trace pas l'erreur hors bloc appli");
+            return true;
+        }
+        if (gbEsd1AddOn && (
+            (!gbEsd1Intranet && ($(jTargetObject).parents(gContentSelector).length == 0)) ||
+            (gbEsd1Intranet && !(($(jTargetObject).parents(gContentSelector).length !== 0) || ($(jTargetObject).parents('div.a_blocappli').is("div"))))
+        )
+        ) {
+            Trace(jTargetObject, sWording, " --- on ne trace pas l'erreur hors contenu");
+            return true;
+        }
+        if ($(jTargetObject).parents("#CYB1_VOC, #CYB1_VOC_LIGHTBOX").length > 0) {
+            //on élimine VOC de la vérif
+            Trace(jTargetObject, sWording, " --- on ne trace pas l'erreur VOC");
+            return true;
+        }
+    }
+
+    if ($(jTargetObject).parents("div.screen-diagnostics-block").length > 0) {
+        //on élimine la barre devbooster de la vérif
+        Trace(jTargetObject, sWording, " --- on ne trace pas l'erreur de la barre devbooster");
+        return true;
+    }
+
+    // Recherche du premier Id disponible dans l'arborescence père (pour le notifier à l'appelant = le maquetteur)
+    while ((sTargetId == "" || sTargetId == null || sTargetId == undefined) && jElem != undefined && jElem != null && jElem.length != 0) {
+        sTargetId = jElem.attr("id");
+        jElem = jElem.parent();
+    }
+
+    // Compteur des messages d'erreur/alerte/info.
+    switch (oRule.Level) {
+        case "err":
+            giEsd1ErrorMessageCounter++;
+            break;
+        case "warn":
+            giEsd1WarningMessageCounter++;
+            break;
+        case "info":
+            giEsd1InfoMessageCounter++;
+            break;
+        default:
+            break;
+    }
+
+    // incrémente le compteur des erreurs
+    giEsd1ErrCounter++;
+
+    // ajoute dans la liste des erreur à afficher dans ALLY window si en mode Ally
+    if (gbEsd1ALLY && oRule.RGAA) {
+        // var errRule = oRule;
+        var errRule = Object.assign({}, oRule);
+        // RP- on enrichi avec un peu d'info sur l"élément html pour faciliter le repérage depuis ALLY window    
+        errRule["occurrence"] = jTargetObject.get(0).outerHTML.trim();
+        gsEsd1ALLYAutoErrorRulesResults.push(errRule);
+    }
+
+    // Mise à jour du message d'erreur si l'erreur se situe dans un dialogue modal
+    // (ne doit pas être effectué avant, car le flag d'erreur n'a pas besoin d'indiquer que l'on est dans une LB, contrairement au log complet)
+    //  - Recherche si un parent est la Lightbox
+    var jParentLB = jTargetObject.parents("div.ei_blocmodal");
+    var bIsDisplayed = true; // indique si l'erreur trouvée se situe dans du code html visible
+    var bIsLightBox = false; // indique si l'erreur trouvée se situe dans une ligthbox
+
+    if (jParentLB.length > 0) {
+        bIsLightBox = true;
+        if (!Esd1IsVisible(jParentLB)) bIsDisplayed = false;
+
+        // - Récupération de son Titre
+        var sTitle = "";
+        var jTitle = jParentLB.find("div.a_blocfctltitre p.a_titre2");
+
+        if (jTitle.length > 0) sTitle = jTitle.first().text();
+        if (sTitle.length > 0) sWording = sWording.substring(0, sWording.length - 1) + Esd1FormatText(ESD1_MESSAGES.Std.InLightbox.replace("_", " "), "'" + sTitle + "'");
+        else sWording = sWording.substring(0, sWording.length - 1) + Esd1FormatText(ESD1_MESSAGES.Std.InLightbox.replace("_", ""), "");
+    }
+    else {
+        jTargetObject.parents().each(function () {
+
+            sTagName = $(this)[0].tagName.toLowerCase();
+
+            if (bIsDisplayed && sTagName != "html" && sTagName != "body") {
+
+                if (!Esd1IsVisible($(this))) {
+                    bIsDisplayed = false;
+                }
+            }
+        });
+
+        if (!bIsDisplayed) {
+            sWording = sWording.substring(0, sWording.length - 1) + ESD1_MESSAGES.Std.HiddenError;
+        }
+    }
+
+    if (sDomain == "") {
+        sDomain = "Internet - Intranet.";
+    }
+
+    // GSA 07/11/2019 : LOT6 T4-2019 - retrait des domaines sur le message affiché
+    var sTemp = ' - ' + sCategories + ' : '
+    sWording = sWording.replace(" : ", sTemp);
+
+    // HTML ID of error highlight
+    var sErrorId = 'ergoqual_E' + giEsd1ErrCounter;
+    // Formatage du lien de la documentation
+    var sErrorDocLink = Esd1FormatDocumentationUrl(oRule.DocLink);
+    // Error highlighting 
+    // valeur par défaut = erreur (FBC)
+    if (oRule.Level == undefined || oRule.Level == null || oRule.Level == "")
+        sLevel = kLEVEL_ERROR;
+    jTargetObject.addClass('ergoqual_' + oRule.Level + '_highlight_' + giEsd1ErrCounter);
+    // Error flag injection in HTML DOM
+    var sHtmlHighlight;
+
+    // Error log (inside HTML)
+    if (gbEsd1ShowReport) {
+        var sHtmlErrorLog;
+        // si appel depuis l'add-on on ne fait disparaitre le smiley sur l'erreur précédente (on se contente de mettre le smiley sur l'erreur pointée)
+            // appel de la fonction de gestion du focus en erreur quand le js est local à la page testée
+            var glyphToShow = "";
+            var classError = "";
+            var classHighlight = "ergoqual_" + oRule.Level + "_highlight_" + giEsd1ErrCounter;;
+            var classHighlighted = "ei_ergoqual_" + oRule.Level + "_highlighted";;
+            var classHighlighting = "ei_ergoqual_" + oRule.Level + "_highlighting";
+            switch (oRule.Level) {
+                case "err":
+                    glyphToShow = "ei_ergoqual_gly_ic_clear";
+                    classError = "ei_ergoqual_error";
+                    break;
+                case "warn":
+                    glyphToShow = "ei_ergoqual_gly_ic_warning";
+                    classError = "ei_ergoqual_warning";
+                    break;
+                case "info":
+                    glyphToShow = "ei_ergoqual_gly_ic_info";
+                    classError = "ei_ergoqual_info";
+                    break;
+                default:
+                    break;
+            }
+
+            sHtmlHighlight = '<a id="' + sErrorId + '"class="' + glyphToShow + '" name="' + sErrorId + '" title="' + sWording + ' ' + ESD1_MESSAGES.Std.ClickToGoErrorList + '" onclick="$(\'#ergoqual_E' + giEsd1ErrCounter + '\').removeClass(\'ergoqual_focus\');$(\'.ergoqual_diverror\').slideDown(\'slow\');$(\'#ergoqual_resize\').addClass(\'ei_ergoqual_gly_ic_expand_less\').removeClass(\'ei_ergoqual_gly_ic_expand_more\');" onblur="$(\'.' + classHighlight + '\').removeClass(\'' + classHighlighting + '\');" href="#">';
+            var level = '';
+            switch (oRule.Level) {
+                case 'err':
+                    level = ESD1_MESSAGES.ExportCsv.Error;
+                    break;
+                case 'warn':
+                    level = ESD1_MESSAGES.ExportCsv.Alert;
+                    break;
+                case 'info':
+                    level = ESD1_MESSAGES.ExportCsv.Info;
+                    break;
+                default:
+                    level = oRule.Level;
+            }
+            sHtmlErrorLog = `<p>
+                <a class="${classError} ${glyphToShow}" href="#"
+                    data-ergoqual-counter="ergoqual_E${giEsd1ErrCounter}"
+                    data-ergoqual-level="${level}"
+                    data-ergoqual-errorid="${oRule.ErrorId}"
+                    data-ergoqual-code="${encodeURIComponent(jTargetObject.prop("outerHTML").slice(0, 250).replace(/\;/g, '\,').replace(/(\r\n|\n|\r)/gm, ""))}"
+                    data-ergoqual-text="${sText.replace(/\"/g, '\\"')}"                                                                                                           l-text="${sText.replace(/\"/g, '\\"')}"
+                    title="${ESD1_MESSAGES.Std.SeeErrorObject}">
+                    ${sWording}
+                </a>`;
+        
+        /*TODO: API COMMUNICATION - TO merge with the rest , this is redundant */
+        const apiDataErgoqual = {
+            "data-ergoqual-counter": `ergoqual_E${giEsd1ErrCounter}`,
+            "data-ergoqual-level": `${level}`,
+            "data-ergoqual-errorid": `${oRule.ErrorId}`,
+            "data-ergoqual-code": `${jTargetObject.prop("outerHTML").slice(0, 250).replace(/\;/g, '\,').replace(/(\r\n|\n|\r)/gm, "")}`,
+            "data-ergoqual-text": `${sText.replace(/\"/g, '\\"')}`,
+        };
+        gsEsd1AllRulesResults.push(apiDataErgoqual)
+
+        //Détermination automatique de la position de l'erreur en fonction de la balise courante
+        Esd1AutoAddHighlight(jTargetObject, sHtmlHighlight);
+
+        if (sErrorDocLink.length > 0) {
+            // On affiche un lien hypertexte.
+            if (sErrorDocLink.startsWith('https://ergonomie-ei-si.cm-cic.fr')) {
+                sHtmlErrorLog += ' <a class="ei_ergoqual_doc ei_ergoqual_gly_ic_insert_drive_file" href="' + sErrorDocLink + '" target="_blank" title="' + ESD1_MESSAGES.Std.SeeDocumentationErgo + '">' + ESD1_MESSAGES.Std.DocumentationErgo + '</a>';
+            }
+            else if (sErrorDocLink.startsWith('http')) {
+                sHtmlErrorLog += ' <a class="ei_ergoqual_doc ei_ergoqual_gly_ic_insert_drive_file" href="' + sErrorDocLink + '" target="_blank" title="' + ESD1_MESSAGES.Std.SeeDocumentation + '">' + ESD1_MESSAGES.Std.Documentation + '</a>';
+            }
+            // Exemple Sample, cas du addon qui n'a plus les url internes.
+            else if (sErrorDocLink.startsWith('pagelfs')) {
+                // On retire le paramètre pageLfs de l'URL. Ex : pagelfs=ListeRechercher => ListeRechercher
+                sHtmlErrorLog += ' <span class="ei_ergoqual_doc ei_ergoqual_gly_ic_insert_drive_file" title="' + ESD1_MESSAGES.Std.SeeDocumentationLfs + '">SAMPLE: ' + sErrorDocLink.substring(sErrorDocLink.lastIndexOf("=") + 1, sErrorDocLink.length) + '</span>';
+            }
+            else if (sErrorDocLink.startsWith('ergo_')) {
+                // console.log(CONFIG.ergoPageURL.replace('{0}', sErrorDocLink.substring(sErrorDocLink.lastIndexOf("_") + 1, sErrorDocLink.length)));
+
+                // On retire le paramètre ergo_ du paramètre, et on le substitut dans l'url.
+                sHtmlErrorLog += ' <a class="ei_ergoqual_doc ei_ergoqual_gly_ic_insert_drive_file" href="' + CONFIG.ergoPageURL.replace('{0}', sErrorDocLink.substring(sErrorDocLink.lastIndexOf("_") + 1, sErrorDocLink.length)) + '" target="_blank" title="' + ESD1_MESSAGES.Std.SeeDocumentationErgo + '">' + ESD1_MESSAGES.Std.Documentation + '</a>';
+            }
+            // Doc pixis, cas du addon qui n'a plus les url internes.
+            else {
+                // On retire le signet de la doc. Ex : 0990016403;signet:OBJ_3 => 0990016403
+                var docPixis = sErrorDocLink.indexOf(";") != -1 ? sErrorDocLink.substring(0, sErrorDocLink.indexOf(";")) : sErrorDocLink;
+                sHtmlErrorLog += ' <span class="ei_ergoqual_doc ei_ergoqual_gly_ic_insert_drive_file" title="' + ESD1_MESSAGES.Std.SeeDocumentationPixis + '">DOC PIXIS: ' + docPixis + '</span>';
+            }
+        }
+
+        if (oRule.FaeLink) {
+            sHtmlErrorLog += ' <a class="ei_ergoqual_doc ei_ergoqual_gly_ic_insert_drive_file" target="_blank" href="https://ergonomie-ei-si.cm-cic.fr/fr/accessibilite/faeaccessibilite.html?fae=' + encodeURIComponent(oRule.RGAA.Test) + '">' + ESD1_MESSAGES.Std.FAE.replace('%1', oRule.RGAA.Test) + '</a> ';
+        }
+
+        if (oRule.RGAA && oRule.RGAA.LienDoc) {
+            sHtmlErrorLog += ' <a class="ei_ergoqual_doc ei_ergoqual_gly_ic_insert_drive_file" target="_blank" href="' + oRule.RGAA.LienDoc + '">' + ESD1_MESSAGES.Std.RGAA + '</a> ';
+        }
+
+        // Fermeture et itération du texte d'erreur
+        sHtmlErrorLog += '</p>';
+        $(".ergoqual_diverror").append(sHtmlErrorLog);
+
+        // répétition de l'erreur dans la lightbox
+        Trace(jTargetObject, "AddError " + sWording + "  ", "isLightbox=" + bIsLightBox + " IsDisplayed=" + bIsDisplayed);
+        if (bIsLightBox && bIsDisplayed) {
+            $(".ergoqual_diverror_lightbox").append(sHtmlErrorLog);
+        }
+
+        $('body').on('click', `[data-ergoqual-counter="ergoqual_E${giEsd1ErrCounter}"]`, function() {
+            $('.ergoqual_focus').removeClass('ergoqual_focus');
+            $('#ergoqual_E' + giEsd1ErrCounter).addClass('ergoqual_focus').focus();
+            $('.ergoqual_diverror').slideUp('slow', function() {
+                $('html,body').animate({ scrollTop: $('#' + sErrorId).offset().top }, 'slow');
+            });
+            $('#ergoqual_resize').addClass('ei_ergoqual_gly_ic_expand_more').removeClass('ei_ergoqual_gly_ic_expand_less');
+            $('.' + classHighlight).addClass(classHighlighting);
+        });
+    
+        $('body').on('mouseover', `[data-ergoqual-counter="ergoqual_E${giEsd1ErrCounter}"]`, function() {
+            $('.' + classHighlight).addClass(classHighlighted);
+        });
+    
+        $('body').on('mouseout', `[data-ergoqual-counter="ergoqual_E${giEsd1ErrCounter}"]`, function() {
+            $('.' + classHighlight).removeClass(classHighlighted);
+        });
+    }
+
+    // Notification au storyboarder de l'erreur
+    if (window.external && ('Esd1ErgoQualNotification' in window.external))
+        window.external.Esd1ErgoQualNotification(oRule.ErrorRule, sWording, sErrorDocLink, oRule.Level, sTargetId, sErrorId);
+}
